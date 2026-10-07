@@ -25,7 +25,10 @@ jobs:
       - name: Syntax and metadata
         run: |
           zsh -n build.command test.command scripts/review-bundle.command
+          bash -n install.sh scripts/test-installer.sh
           plutil -lint source/Info.plist
+      - name: Installer checks (temporary directories, no GUI)
+        run: bash scripts/test-installer.sh
       - name: Routing tests
         run: zsh test.command
       - name: Native build and signature

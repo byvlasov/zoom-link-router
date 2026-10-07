@@ -6,7 +6,8 @@ mkdir -p dist
 task_files=(
   README.md AI_REVIEW.md SECURITY.md BUILDING.md CHANGELOG.md LICENSE .gitignore
   source/Router.swift source/main.swift source/Info.plist source/Tests/main.swift
-  build.command test.command scripts/review-bundle.command .github/workflows/checks.yml
+  build.command test.command install.sh scripts/test-installer.sh
+  scripts/review-bundle.command .github/workflows/checks.yml
 )
 {
   print -r -- 'ZOOM LINK ROUTER — REVIEW BUNDLE'
