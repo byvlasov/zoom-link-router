@@ -1,0 +1,39 @@
+name: Tests and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: xcrun swiftc --version
+      - name: Syntax and metadata
+        run: |
+          zsh -n build.command test.command scripts/review-bundle.command
+          plutil -lint source/Info.plist
+      - name: Routing tests
+        run: zsh test.command
+      - name: Native build and signature
+        run: |
+          zsh build.command
+          codesign --verify --deep --strict --all-architectures 'Zoom Link Router.app'
+          lipo -info 'Zoom Link Router.app/Contents/MacOS/ZoomLinkRouter'
+      - name: Review bundle
+        run: |
+          zsh scripts/review-bundle.command
+          test -s dist/REVIEW_BUNDLE.txt
