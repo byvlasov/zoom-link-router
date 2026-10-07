@@ -17,15 +17,17 @@ zlr_cleanup() {
 zlr_main() {
     PATH=/usr/bin:/bin:/usr/sbin:/sbin
     export PATH
-    local app_dir='' launch=1 version target unpacked actual
+    local app_dir='' launch=1 trust=0 version target unpacked actual
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --no-open) launch=0; shift ;;
+            --trust) trust=1; shift ;;
             --app-dir)
                 [[ $# -ge 2 && "$2" == /* ]] || zlr_fail '--app-dir требует абсолютный путь.'
                 app_dir="$2"; shift 2 ;;
             --help)
-                printf '%s\n' 'Usage: bash install.sh [--no-open] [--app-dir /absolute/directory]'
+                printf '%s\n' 'Usage: bash install.sh [--trust] [--no-open] [--app-dir /absolute/directory]' \
+                    '--trust: remove quarantine only from the verified app; bypass its quarantine-based Gatekeeper check.'
                 return 0 ;;
             *) zlr_fail "Неизвестный аргумент: $1" ;;
         esac
@@ -74,7 +76,7 @@ zlr_main() {
 
     if [[ -e "$target" ]]; then
         if diff -qr "$unpacked" "$target" >/dev/null; then
-            printf '%s\n' 'Эта версия уже установлена; файлы не изменены.'
+            printf '%s\n' 'Эта версия уже установлена; повторное копирование не требуется.'
         else
             zlr_fail "Уже существует другая сборка: $target. Она не изменена. Для замены сначала переместите её в Корзину и повторите установку."
         fi
@@ -83,7 +85,7 @@ zlr_main() {
         ditto "$unpacked" "$zlr_stage/$ZLR_APP_NAME"
         codesign --verify --deep --strict --all-architectures "$zlr_stage/$ZLR_APP_NAME"
         # Mark this downloaded app for the normal first-launch Gatekeeper check.
-        # Do not remove quarantine or change system security settings.
+        # Removal below requires the explicit --trust option.
         xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");ZoomLinkRouterInstaller;$(uuidgen)" \
             "$zlr_stage/$ZLR_APP_NAME"
         [[ ! -e "$target" && ! -L "$target" ]] || zlr_fail 'Приложение появилось во время установки. Повторите после проверки папки.'
@@ -91,12 +93,20 @@ zlr_main() {
         [[ ! -e "$zlr_stage/$ZLR_APP_NAME" ]] || zlr_fail 'Не удалось переместить приложение.'
         printf 'Установлено: %s\n' "$target"
     fi
+    if [[ "$trust" -eq 1 ]]; then
+        # The target is either the verified release or an identical existing copy.
+        # -s operates on symlinks themselves, never on their external targets.
+        xattr -drs com.apple.quarantine "$target"
+        printf '%s\n' 'По вашему выбору снята метка карантина macOS только с Zoom Link Router.'
+    fi
     printf '%s\n' \
         'После открытия приложения:' \
         '• Если написано «Включено», всё уже настроено — нажмите «Закрыть».' \
         '• Если есть кнопка «Включить», нажмите её и подтвердите Use “Zoom Link Router” в запросе macOS.' \
-        'Если macOS не может проверить разработчика: Системные настройки → Конфиденциальность и безопасность → Всё равно открыть.' \
         'Zoom должен быть установлен отдельно. Остальные веб-ссылки будут открываться в Safari.'
+    if [[ "$trust" -eq 0 ]]; then
+        printf '%s\n' 'Если macOS не может проверить разработчика: Системные настройки → Конфиденциальность и безопасность → Всё равно открыть.'
+    fi
     if [[ "$launch" -eq 1 ]]; then
         if ! open "$target"; then
             printf '%s\n' 'Приложение установлено, но macOS не разрешила запуск. Откройте его из «Программ» по инструкции выше.' >&2

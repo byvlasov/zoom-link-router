@@ -51,6 +51,29 @@ test_run --app-dir "$test_app_dir" || test_fail launch-request
 [[ "$(cat "$test_root/open.log")" == "$test_app" ]] || test_fail launch-path
 test_pass 'requests launch of the installed path (open mocked)'
 
+touch "$test_root/unrelated-app"
+xattr -w com.apple.quarantine unrelated "$test_root/unrelated-app"
+test_run --app-dir "$test_app_dir" --trust --no-open || test_fail trust-existing
+if xattr -p com.apple.quarantine "$test_app" >/dev/null 2>&1; then test_fail quarantine-not-removed; fi
+[[ "$(xattr -p com.apple.quarantine "$test_root/unrelated-app")" == unrelated ]] || test_fail unrelated-quarantine-changed
+[[ "$(stat -f '%i:%m' "$test_app/Contents/MacOS/ZoomLinkRouter")" == "$test_before" ]] || test_fail trust-rewritten
+test_pass 'explicit trust removes only target quarantine and preserves executable'
+
+test_run --app-dir "$test_app_dir" --trust --no-open || test_fail trust-repeat
+test_pass 'explicit trust is repeatable when quarantine is already absent'
+
+test_run --app-dir "$test_root/trusted-fresh" --trust --no-open || test_fail trust-fresh
+if xattr -p com.apple.quarantine "$test_root/trusted-fresh/Zoom Link Router.app" >/dev/null 2>&1; then test_fail fresh-quarantine-not-removed; fi
+codesign --verify --deep --strict --all-architectures "$test_root/trusted-fresh/Zoom Link Router.app"
+test_pass 'fresh trusted install remains correctly signed'
+
+xattr -w com.apple.quarantine keep-quarantined "$test_app"
+export ZLR_TEST_DOWNLOAD=corrupt
+if test_run --app-dir "$test_app_dir" --trust --no-open; then test_fail corrupt-trust-accepted; fi
+[[ "$(xattr -p com.apple.quarantine "$test_app")" == keep-quarantined ]] || test_fail trust-before-hash-check
+unset ZLR_TEST_DOWNLOAD
+test_pass 'failed checksum cannot remove existing quarantine even with explicit trust'
+
 printf 'keep me' > "$test_app/custom-file"
 if test_run --app-dir "$test_app_dir" --no-open; then test_fail replaced-different-app; fi
 [[ "$(cat "$test_app/custom-file")" == 'keep me' ]] || test_fail lost-custom-file
